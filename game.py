@@ -158,7 +158,10 @@ def _print_move(player: Player, piece: Piece, old_pos: int, die: int):
     if old_pos == -1:
         print(f"  Nappula {piece.idx + 1} lähti kotipesästä radalle (ruutu {piece.pos}).")
     elif piece.is_in_goal():
-        print(f"  Nappula {piece.idx + 1} siirtyi maalialueelle (ruutu {piece.goal_index() + 1}/4).")
+        if old_pos >= 100:
+            print(f"  Nappula {piece.idx + 1} eteni maalialueella (ruutu {piece.goal_index() + 1}/4).")
+        else:
+            print(f"  Nappula {piece.idx + 1} siirtyi maalialueelle (ruutu {piece.goal_index() + 1}/4).")
     else:
         print(f"  Nappula {piece.idx + 1}: ruutu {old_pos} → {piece.pos}.")
 
