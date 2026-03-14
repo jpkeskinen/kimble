@@ -4,7 +4,7 @@ from board import (
     Piece, TRACK_SIZE, HOME_SIZE, NUM_PLAYERS,
     PLAYER_STARTS, PLAYER_COLORS, PLAYER_SYMBOLS, home_entry
 )
-from player import Player
+from player import Player, STRATEGY_NAMES
 
 
 def roll_die() -> int:
@@ -36,6 +36,25 @@ def get_piece_at(all_players: list[Player], track_pos: int) -> Piece | None:
             if piece.is_on_track() and piece.pos == track_pos:
                 return piece
     return None
+
+
+def get_eating_pieces(
+    player: Player, movable: list[Piece], all_players: list[Player], die: int
+) -> set[Piece]:
+    """Palauta joukko nappuloista, jotka syövät vastustajan tällä siirrolla."""
+    eating = set()
+    for piece in movable:
+        if piece.is_home():
+            new_pos = PLAYER_STARTS[player.player_id]
+        elif piece.is_on_track():
+            new_pos = _compute_new_pos(piece.pos, die, player.player_id)
+        else:
+            continue  # maalialueella ei voi syödä
+        if new_pos is not None and 0 <= new_pos < TRACK_SIZE:
+            victim = get_piece_at(all_players, new_pos)
+            if victim is not None and victim.player != player.player_id:
+                eating.add(piece)
+    return eating
 
 
 def get_movable_pieces(player: Player, die: int, all_players: list[Player]) -> list[Piece]:
@@ -125,8 +144,9 @@ class Game:
     def _play_turn(self, player: Player):
         if self.verbose:
             print(f"\n{'='*50}")
-            print(f"Vuoro: {player.name} ({'ihminen' if player.is_human else 'tietokone'})")
+            print(f"Vuoro: {player.name} ({player.type_label})")
 
+        preferred_piece = None
         extra_rolls = 0
         while True:
             die = roll_die()
@@ -140,10 +160,12 @@ class Game:
                     print("  Ei siirrettäviä nappuloita.")
                 break
 
-            piece = player.choose_piece(movable, die)
+            can_eat = get_eating_pieces(player, movable, self.players, die)
+            piece = player.choose_piece(movable, die, can_eat=can_eat, preferred_piece=preferred_piece)
             if piece is None:
                 break
 
+            was_home = piece.is_home()
             old_pos = piece.pos
             move_piece(piece, die, player, self.players, verbose=self.verbose)
             if self.verbose:
@@ -152,6 +174,9 @@ class Game:
 
             if player.has_won():
                 break
+
+            # Strategiat 'longest'/'longest_eat': bonus-heitolla suositaan juuri kotipesästä otettua nappulaa
+            preferred_piece = piece if was_home and player.strategy in ('longest', 'longest_eat') else None
 
             if die == 6:
                 extra_rolls += 1
@@ -225,9 +250,8 @@ def print_board(all_players: list[Player]):
             slot = next((p for p in player.pieces_in_goal() if p.goal_index() == i), None)
             goal_slots += f"[{player.symbol if slot else '.'}]"
 
-        type_str = "ihminen" if player.is_human else "tietokone"
         print(
-            f"  {player.symbol} {player.name:10s} ({type_str:10s}) | "
+            f"  {player.symbol} {player.name:10s} ({player.type_label:35s}) | "
             f"Koti: {home_count} | Rata: {track_count} | "
             f"Maali: {goal_slots}"
         )

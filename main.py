@@ -2,20 +2,45 @@
 """Kimble-pelin käynnistys."""
 from tqdm import tqdm
 from board import NUM_PLAYERS, PLAYER_COLORS
-from player import Player
+from player import Player, STRATEGY_NAMES, STRATEGY_KEYS
 from game import Game
 
+_STRATEGY_MENU = "\n".join(
+    f"    [{i + 1}] {name}" for i, name in enumerate(STRATEGY_NAMES.values())
+)
 
-def ask_player_type(player_id: int) -> bool:
-    """Kysy onko pelaaja ihminen (True) vai tietokone (False)."""
+
+def ask_player_setup(player_id: int) -> Player:
+    """Kysy pelaajan tyyppi: ihminen tai jokin tietokonestrategia."""
     color = PLAYER_COLORS[player_id]
+    print(f"\n  Pelaaja {player_id + 1} ({color}):")
+    print("    [0] Ihminen")
+    print(_STRATEGY_MENU)
     while True:
-        choice = input(f"  Pelaaja {player_id + 1} ({color}) – (i)hminen vai (t)ietokone? ").strip().lower()
-        if choice in ("i", "ihminen", "h", "human"):
-            return True
-        if choice in ("t", "tietokone", "c", "computer", "a", "ai"):
-            return False
-        print("  Kirjoita 'i' tai 't'.")
+        try:
+            choice = int(input(f"  Valinta (0-{len(STRATEGY_KEYS)}): ").strip())
+            if choice == 0:
+                return Player(player_id, is_human=True)
+            if 1 <= choice <= len(STRATEGY_KEYS):
+                return Player(player_id, is_human=False, strategy=STRATEGY_KEYS[choice - 1])
+        except (ValueError, EOFError):
+            pass
+        print(f"  Kirjoita numero 0–{len(STRATEGY_KEYS)}.")
+
+
+def ask_computer_strategy(player_id: int) -> Player:
+    """Kysy tietokonestrategia simulaatiota varten."""
+    color = PLAYER_COLORS[player_id]
+    print(f"\n  Pelaaja {player_id + 1} ({color}):")
+    print(_STRATEGY_MENU)
+    while True:
+        try:
+            choice = int(input(f"  Valinta (1-{len(STRATEGY_KEYS)}): ").strip())
+            if 1 <= choice <= len(STRATEGY_KEYS):
+                return Player(player_id, is_human=False, strategy=STRATEGY_KEYS[choice - 1])
+        except (ValueError, EOFError):
+            pass
+        print(f"  Kirjoita numero 1–{len(STRATEGY_KEYS)}.")
 
 
 def ask_num_simulations() -> int:
@@ -30,17 +55,22 @@ def ask_num_simulations() -> int:
 
 
 def run_simulation(n: int):
+    print("\nValitse strategia kullekin pelaajalle:")
+    template_players = [ask_computer_strategy(i) for i in range(NUM_PLAYERS)]
+    strategies = [p.strategy for p in template_players]
+
     wins = [0] * NUM_PLAYERS
     for _ in tqdm(range(n), desc="Simuloidaan", unit="peli"):
-        players = [Player(i, is_human=False) for i in range(NUM_PLAYERS)]
+        players = [Player(i, is_human=False, strategy=strategies[i]) for i in range(NUM_PLAYERS)]
         winner = Game(players, verbose=False).run()
         wins[winner] += 1
 
     print(f"\nTulokset ({n} peliä):")
-    print("-" * 35)
+    print("-" * 55)
     for i, w in enumerate(wins):
-        print(f"  {PLAYER_COLORS[i]:10s}: {w:5d} voittoa  ({100 * w / n:.1f} %)")
-    print("-" * 35)
+        strategy_name = STRATEGY_NAMES[strategies[i]]
+        print(f"  {PLAYER_COLORS[i]:10s} ({strategy_name:35s}): {w:5d}  ({100 * w / n:.1f} %)")
+    print("-" * 55)
 
 
 def main():
@@ -49,7 +79,7 @@ def main():
     print("=" * 50)
 
     while True:
-        mode = input("(p)eli vai (s)imulaatio? ").strip().lower()
+        mode = input("\n(p)eli vai (s)imulaatio? ").strip().lower()
         if mode in ("p", "peli", "g", "game"):
             break
         if mode in ("s", "simulaatio", "sim"):
@@ -58,11 +88,8 @@ def main():
             return
         print("  Kirjoita 'p' tai 's'.")
 
-    print("Valitse pelaajatyypit (4 pelaajaa):\n")
-    players = []
-    for i in range(NUM_PLAYERS):
-        is_human = ask_player_type(i)
-        players.append(Player(i, is_human))
+    print("\nValitse pelaajatyypit:")
+    players = [ask_player_setup(i) for i in range(NUM_PLAYERS)]
 
     print("\nPeli alkaa!\n")
     Game(players).run()
