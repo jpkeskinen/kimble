@@ -157,11 +157,11 @@ class Game:
                 extra_rolls += 1
                 if extra_rolls < 3:
                     if self.verbose:
-                        print(f"  Kuudonen! {player.name} saa heittää uudelleen.")
+                        print(f"  Kuutonen! {player.name} saa heittää uudelleen.")
                     continue
                 else:
                     if self.verbose:
-                        print("  Kolmas kuudonen peräkkäin – vuoro päättyy.")
+                        print("  Kolmas kuutonen peräkkäin – vuoro päättyy.")
             break
 
 
