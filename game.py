@@ -4,7 +4,7 @@ from board import (
     Piece, TRACK_SIZE, HOME_SIZE, NUM_PLAYERS,
     PLAYER_STARTS, PLAYER_COLORS, PLAYER_SYMBOLS, home_entry
 )
-from player import Player, STRATEGY_NAMES
+from player import Player
 
 
 def roll_die() -> int:
@@ -146,7 +146,6 @@ class Game:
             print(f"\n{'='*50}")
             print(f"Vuoro: {player.name} ({player.type_label})")
 
-        preferred_piece = None
         extra_rolls = 0
         while True:
             die = roll_die()
@@ -160,23 +159,21 @@ class Game:
                     print("  Ei siirrettäviä nappuloita.")
                 break
 
-            can_eat = get_eating_pieces(player, movable, self.players, die)
-            piece = player.choose_piece(movable, die, can_eat=can_eat, preferred_piece=preferred_piece)
+            can_eat = get_eating_pieces(player, movable, self.players, die) if player.uses_eating else set()
+            piece = player.choose_piece(movable, die, can_eat=can_eat)
             if piece is None:
                 break
 
             was_home = piece.is_home()
             old_pos = piece.pos
             move_piece(piece, die, player, self.players, verbose=self.verbose)
+            player.on_piece_moved(piece, was_home)
             if self.verbose:
                 _print_move(player, piece, old_pos, die)
                 print_board(self.players)
 
             if player.has_won():
                 break
-
-            # Strategiat 'longest'/'longest_eat': bonus-heitolla suositaan juuri kotipesästä otettua nappulaa
-            preferred_piece = piece if was_home and player.strategy in ('longest', 'longest_eat') else None
 
             if die == 6:
                 extra_rolls += 1

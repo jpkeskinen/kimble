@@ -10,37 +10,24 @@ _STRATEGY_MENU = "\n".join(
 )
 
 
-def ask_player_setup(player_id: int) -> Player:
-    """Kysy pelaajan tyyppi: ihminen tai jokin tietokonestrategia."""
+def ask_player_setup(player_id: int, allow_human: bool = True) -> Player:
+    """Kysy pelaajan tyyppi. allow_human=False tarkoittaa vain tietokonestrategioita."""
     color = PLAYER_COLORS[player_id]
     print(f"\n  Pelaaja {player_id + 1} ({color}):")
-    print("    [0] Ihminen")
+    low = 0 if allow_human else 1
+    if allow_human:
+        print("    [0] Ihminen")
     print(_STRATEGY_MENU)
     while True:
         try:
-            choice = int(input(f"  Valinta (0-{len(STRATEGY_KEYS)}): ").strip())
-            if choice == 0:
+            choice = int(input(f"  Valinta ({low}-{len(STRATEGY_KEYS)}): ").strip())
+            if allow_human and choice == 0:
                 return Player(player_id, is_human=True)
             if 1 <= choice <= len(STRATEGY_KEYS):
                 return Player(player_id, is_human=False, strategy=STRATEGY_KEYS[choice - 1])
         except (ValueError, EOFError):
             pass
-        print(f"  Kirjoita numero 0–{len(STRATEGY_KEYS)}.")
-
-
-def ask_computer_strategy(player_id: int) -> Player:
-    """Kysy tietokonestrategia simulaatiota varten."""
-    color = PLAYER_COLORS[player_id]
-    print(f"\n  Pelaaja {player_id + 1} ({color}):")
-    print(_STRATEGY_MENU)
-    while True:
-        try:
-            choice = int(input(f"  Valinta (1-{len(STRATEGY_KEYS)}): ").strip())
-            if 1 <= choice <= len(STRATEGY_KEYS):
-                return Player(player_id, is_human=False, strategy=STRATEGY_KEYS[choice - 1])
-        except (ValueError, EOFError):
-            pass
-        print(f"  Kirjoita numero 1–{len(STRATEGY_KEYS)}.")
+        print(f"  Kirjoita numero {low}–{len(STRATEGY_KEYS)}.")
 
 
 def ask_num_simulations() -> int:
@@ -56,7 +43,7 @@ def ask_num_simulations() -> int:
 
 def run_simulation(n: int):
     print("\nValitse strategia kullekin pelaajalle:")
-    template_players = [ask_computer_strategy(i) for i in range(NUM_PLAYERS)]
+    template_players = [ask_player_setup(i, allow_human=False) for i in range(NUM_PLAYERS)]
     strategies = [p.strategy for p in template_players]
 
     wins = [0] * NUM_PLAYERS
