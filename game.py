@@ -76,7 +76,7 @@ def get_movable_pieces(player: Player, die: int, all_players: list[Player]) -> l
     return movable
 
 
-def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player]):
+def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player], verbose: bool = True):
     """Siirrä nappulaa ja tee tarvittavat toimenpiteet (torkkaaminen)."""
     if piece.is_home():
         new_pos = PLAYER_STARTS[player.player_id]
@@ -92,44 +92,52 @@ def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player]
     if 0 <= new_pos < TRACK_SIZE:
         victim = get_piece_at(all_players, new_pos)
         if victim is not None and victim.player != player.player_id:
-            print(f"  Torkku! {PLAYER_COLORS[victim.player]}'n nappula {victim.idx + 1} palaa kotipesään.")
+            if verbose:
+                print(f"  Torkku! {PLAYER_COLORS[victim.player]}'n nappula {victim.idx + 1} palaa kotipesään.")
             victim.pos = -1
 
     piece.pos = new_pos
 
 
 class Game:
-    def __init__(self, players: list[Player]):
+    def __init__(self, players: list[Player], verbose: bool = True):
         self.players = players
         self.turn = 0
+        self.verbose = verbose
 
     def current_player(self) -> Player:
         return self.players[self.turn % NUM_PLAYERS]
 
-    def run(self):
-        print_board(self.players)
+    def run(self) -> int:
+        """Pelaa peli loppuun ja palauta voittajan player_id."""
+        if self.verbose:
+            print_board(self.players)
         while True:
             player = self.current_player()
             self._play_turn(player)
             if player.has_won():
-                print_board(self.players)
-                print(f"\n*** {player.name} voitti pelin! Onnittelut! ***\n")
-                break
+                if self.verbose:
+                    print_board(self.players)
+                    print(f"\n*** {player.name} voitti pelin! Onnittelut! ***\n")
+                return player.player_id
             self.turn += 1
 
     def _play_turn(self, player: Player):
-        print(f"\n{'='*50}")
-        print(f"Vuoro: {player.name} ({'ihminen' if player.is_human else 'tietokone'})")
+        if self.verbose:
+            print(f"\n{'='*50}")
+            print(f"Vuoro: {player.name} ({'ihminen' if player.is_human else 'tietokone'})")
 
         extra_rolls = 0
         while True:
             die = roll_die()
-            print(f"  Noppa: {die}")
+            if self.verbose:
+                print(f"  Noppa: {die}")
 
             movable = get_movable_pieces(player, die, self.players)
 
             if not movable:
-                print("  Ei siirrettäviä nappuloita.")
+                if self.verbose:
+                    print("  Ei siirrettäviä nappuloita.")
                 break
 
             piece = player.choose_piece(movable, die)
@@ -137,9 +145,10 @@ class Game:
                 break
 
             old_pos = piece.pos
-            move_piece(piece, die, player, self.players)
-            _print_move(player, piece, old_pos, die)
-            print_board(self.players)
+            move_piece(piece, die, player, self.players, verbose=self.verbose)
+            if self.verbose:
+                _print_move(player, piece, old_pos, die)
+                print_board(self.players)
 
             if player.has_won():
                 break
@@ -147,10 +156,12 @@ class Game:
             if die == 6:
                 extra_rolls += 1
                 if extra_rolls < 3:
-                    print(f"  Kuudonen! {player.name} saa heittää uudelleen.")
+                    if self.verbose:
+                        print(f"  Kuudonen! {player.name} saa heittää uudelleen.")
                     continue
                 else:
-                    print("  Kolmas kuudonen peräkkäin – vuoro päättyy.")
+                    if self.verbose:
+                        print("  Kolmas kuudonen peräkkäin – vuoro päättyy.")
             break
 
 
