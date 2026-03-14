@@ -3,16 +3,18 @@ import random
 from board import Piece, PLAYER_COLORS, PLAYER_SYMBOLS, PLAYER_STARTS, TRACK_SIZE
 
 STRATEGY_NAMES = {
-    'random':       'Satunnainen',
-    'longest':      'Pisin ensin (kuutosella uusi nappula)',
-    'longest_eat':  'Pisin ensin + syö',
-    'shortest':     'Lyhin ensin',
-    'shortest_eat': 'Lyhin ensin + syö',
+    'random':            'Satunnainen',
+    'longest':           'Pisin ensin (kuutosella uusi nappula)',
+    'longest_eat':       'Pisin ensin + syö',
+    'longest_eat_dodge': 'Pisin ensin + syö + väistä',
+    'shortest':          'Lyhin ensin',
+    'shortest_eat':      'Lyhin ensin + syö',
 }
 STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 
-_EAT_STRATEGIES = {'longest_eat', 'shortest_eat'}
-_LONGEST_STRATEGIES = {'longest', 'longest_eat'}
+_EAT_STRATEGIES = {'longest_eat', 'longest_eat_dodge', 'shortest_eat'}
+_LONGEST_STRATEGIES = {'longest', 'longest_eat', 'longest_eat_dodge'}
+_DEFENSE_STRATEGIES = {'longest_eat_dodge'}
 
 
 class Player:
@@ -35,6 +37,10 @@ class Player:
     @property
     def uses_eating(self) -> bool:
         return self.strategy in _EAT_STRATEGIES
+
+    @property
+    def uses_defense(self) -> bool:
+        return self.strategy in _DEFENSE_STRATEGIES
 
     def pieces_at_home(self):
         return [p for p in self.pieces if p.is_home()]
@@ -68,13 +74,14 @@ class Player:
         movable: list[Piece],
         die: int,
         can_eat: set | None = None,
+        threatened: set | None = None,
     ) -> Piece | None:
         """Valitse siirrettävä nappula."""
         if not movable:
             return None
         if self.is_human:
             return self._human_choose(movable, die)
-        return self._ai_choose(movable, die, can_eat or set())
+        return self._ai_choose(movable, die, can_eat or set(), threatened or set())
 
     def _human_choose(self, movable: list[Piece], die: int) -> Piece:
         print(f"\n  Liikutettavissa olevat nappulat (heitto: {die}):")
@@ -97,7 +104,7 @@ class Player:
                 pass
             print("  Virheellinen valinta, yritä uudelleen.")
 
-    def _ai_choose(self, movable: list[Piece], die: int, can_eat: set) -> Piece:
+    def _ai_choose(self, movable: list[Piece], die: int, can_eat: set, threatened: set) -> Piece:
         # Syöminen on ylin prioriteetti strategioille longest_eat ja shortest_eat
         if self.strategy in _EAT_STRATEGIES and can_eat:
             best = (max if self.strategy == 'longest_eat' else min)(
@@ -105,6 +112,12 @@ class Player:
             )
             if best is not None:
                 return best
+
+        # Väistä uhattua nappulaa
+        if self.strategy in _DEFENSE_STRATEGIES and threatened:
+            candidates = [p for p in movable if p in threatened]
+            if candidates:
+                return max(candidates, key=self._piece_distance)
 
         if self.strategy == 'random':
             return random.choice(movable)

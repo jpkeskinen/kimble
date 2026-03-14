@@ -57,6 +57,25 @@ def get_eating_pieces(
     return eating
 
 
+def get_threatened_pieces(player: Player, all_players: list[Player]) -> set[Piece]:
+    """Palauta joukko pelaajan radalla olevista nappuloista, joita vastustaja voi syödä seuraavalla siirrolla."""
+    threatened = set()
+    for piece in player.pieces:
+        if not piece.is_on_track():
+            continue
+        for opponent in all_players:
+            if opponent.player_id == player.player_id:
+                continue
+            for opp_piece in opponent.pieces:
+                if not opp_piece.is_on_track():
+                    continue
+                for die in range(1, 7):
+                    if _compute_new_pos(opp_piece.pos, die, opponent.player_id) == piece.pos:
+                        threatened.add(piece)
+                        break
+    return threatened
+
+
 def get_movable_pieces(player: Player, die: int, all_players: list[Player]) -> list[Piece]:
     """Palauta lista nappuloista, joita voidaan siirtää."""
     movable = []
@@ -160,7 +179,8 @@ class Game:
                 break
 
             can_eat = get_eating_pieces(player, movable, self.players, die) if player.uses_eating else set()
-            piece = player.choose_piece(movable, die, can_eat=can_eat)
+            threatened = get_threatened_pieces(player, self.players) if player.uses_defense else set()
+            piece = player.choose_piece(movable, die, can_eat=can_eat, threatened=threatened)
             if piece is None:
                 break
 
