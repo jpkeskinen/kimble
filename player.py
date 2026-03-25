@@ -9,6 +9,7 @@ STRATEGY_NAMES = {
     'longest_eat_dodge': 'Pisin ensin + syö + väistä',
     'shortest':          'Lyhin ensin',
     'shortest_eat':      'Lyhin ensin + syö',
+    'nn':                'Neuroverkko',
 }
 STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 
@@ -27,6 +28,11 @@ class Player:
         self.start = PLAYER_STARTS[player_id]
         self.pieces = [Piece(player_id, i) for i in range(4)]
         self._just_launched: Piece | None = None
+        # Neuroverkkostrategiaa varten
+        self._all_players: list | None = None    # asetetaan Game.__init__:ssa
+        self._nn_override: object | None = None  # NNPlayer-instanssi harjoittelua varten
+        self._training_nn: bool = False          # True → tallenna log_probit
+        self._trajectory: list = []              # log_prob-lista episodille
 
     @property
     def type_label(self) -> str:
@@ -105,6 +111,22 @@ class Player:
             print("  Virheellinen valinta, yritä uudelleen.")
 
     def _ai_choose(self, movable: list[Piece], die: int, can_eat: set, threatened: set) -> Piece:
+        # Neuroverkkostrategia
+        if self.strategy == 'nn':
+            from nn_player import get_nn_player
+            nn = self._nn_override if self._nn_override is not None else get_nn_player()
+            all_players = self._all_players or []
+            result = nn.choose_piece(
+                self, movable, die, all_players, can_eat, threatened,
+                training=self._training_nn,
+            )
+            if self._training_nn:
+                piece, log_prob = result
+                if log_prob is not None:
+                    self._trajectory.append(log_prob)
+                return piece if piece is not None else random.choice(movable)
+            return result if result is not None else random.choice(movable)
+
         # Syöminen on ylin prioriteetti strategioille longest_eat ja shortest_eat
         if self.strategy in _EAT_STRATEGIES and can_eat:
             best = (max if self.strategy == 'longest_eat' else min)(

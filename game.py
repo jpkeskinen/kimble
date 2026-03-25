@@ -142,6 +142,9 @@ class Game:
         self.players = players
         self.turn = 0
         self.verbose = verbose
+        # Anna jokaiselle pelaajalle viittaus koko pelaajalistaan (mm. NN-strategiaa varten)
+        for p in players:
+            p._all_players = players
 
     def current_player(self) -> Player:
         return self.players[self.turn % NUM_PLAYERS]
@@ -178,8 +181,10 @@ class Game:
                     print("  Ei siirrettäviä nappuloita.")
                 break
 
-            can_eat = get_eating_pieces(player, movable, self.players, die) if player.uses_eating else set()
-            threatened = get_threatened_pieces(player, self.players) if player.uses_defense else set()
+            needs_eat = player.uses_eating or player.strategy == 'nn'
+            needs_threat = player.uses_defense or player.strategy == 'nn'
+            can_eat = get_eating_pieces(player, movable, self.players, die) if needs_eat else set()
+            threatened = get_threatened_pieces(player, self.players) if needs_threat else set()
             piece = player.choose_piece(movable, die, can_eat=can_eat, threatened=threatened)
             if piece is None:
                 break
