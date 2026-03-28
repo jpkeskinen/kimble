@@ -6,23 +6,37 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 
+import random
+
 from nn_player import KimbleNet, NNPlayer, MODEL_PATH
 from board import NUM_PLAYERS
-from player import Player
+from player import Player, STRATEGY_KEYS
 from game import Game
+
+# Strategiat joita käytetään satunnaisina vastustajina koulutuksessa
+_OPPONENT_STRATEGIES = [s for s in STRATEGY_KEYS if s != 'nn']
 
 
 def collect_episode(nn: NNPlayer) -> tuple[list[list], int]:
     """
-    Pelaa yksi peli 4 NN-pelaajalla (jaettu malli).
+    Pelaa yksi peli: pelaaja 0 on NN, muut 3 saavat satunnaisesti valitun strategian.
     Palauttaa (trajectories, winner_id).
-    trajectories[i] on lista log_prob-tensoreista pelaajalle i.
+    trajectories[0] on lista log_prob-tensoreista NN-pelaajalle (muut ovat tyhjiä).
     """
-    players = [Player(i, is_human=False, strategy='nn') for i in range(NUM_PLAYERS)]
+    players = []
+    for i in range(NUM_PLAYERS):
+        if i == 0:
+            p = Player(i, is_human=False, strategy='nn')
+        else:
+            strategy = random.choice(_OPPONENT_STRATEGIES)
+            p = Player(i, is_human=False, strategy=strategy)
+        players.append(p)
+
     for p in players:
         p._all_players = players
-        p._nn_override = nn
-        p._training_nn = True
+
+    players[0]._nn_override = nn
+    players[0]._training_nn = True
 
     winner = Game(players, verbose=False).run()
     return [p._trajectory for p in players], winner
@@ -78,10 +92,9 @@ def train(num_episodes: int, batch_size: int, lr: float, device: str):
                 for lp in log_probs:
                     batch_losses.append(-lp * advantage)
 
-            # Päivitä baseline eksponentiaalisella liukuvalla keskiarvolla
-            for pid in range(NUM_PLAYERS):
-                r = 1.0 if pid == winner else 0.0
-                baseline = 0.99 * baseline + 0.01 * r
+            # Päivitä baseline eksponentiaalisella liukuvalla keskiarvolla (vain NN-pelaajan tulos)
+            r = 1.0 if winner == 0 else 0.0
+            baseline = 0.99 * baseline + 0.01 * r
 
         if batch_losses:
             optimizer.zero_grad()
