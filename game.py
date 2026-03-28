@@ -209,8 +209,8 @@ class Game:
                     step_reward += 0.3  # vastustajan syöminen
                 if piece.is_in_goal() and new_dist == TRACK_SIZE + HOME_SIZE:
                     step_reward += 0.5  # nappula viimeiseen maalislottiin
-                lp, _ = player._trajectory[-1]
-                player._trajectory[-1] = (lp, step_reward)
+                lp, _, v, ent = player._trajectory[-1]
+                player._trajectory[-1] = (lp, step_reward, v, ent)
 
             # Syödyksi tulemisen rangaistus syödyn nappulan omistajalle
             if victim is not None:

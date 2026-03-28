@@ -11,6 +11,7 @@ STRATEGY_NAMES = {
     'shortest_eat':      'Lyhin ensin + syö',
     'nn':                'Neuroverkko (matala)',
     'nn_deep':           'Neuroverkko (syvä)',
+    'nn_ac':             'Neuroverkko (Actor-Critic)',
 }
 STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 
@@ -33,7 +34,7 @@ class Player:
         self._all_players: list | None = None    # asetetaan Game.__init__:ssa
         self._nn_override: object | None = None  # NNPlayer-instanssi harjoittelua varten
         self._training_nn: bool = False          # True → tallenna log_probit
-        self._trajectory: list = []              # (log_prob, step_reward) -pareja episodille
+        self._trajectory: list = []              # (log_prob, step_reward, value, entropy) -nelikkoja
         self._pending_reward: float = 0.0        # kertynyt palkkio ennen seuraavaa siirtoa
 
     @property
@@ -114,12 +115,15 @@ class Player:
 
     def _ai_choose(self, movable: list[Piece], die: int, can_eat: set, threatened: set) -> Piece:
         # Neuroverkkostrategiat
-        if self.strategy in ('nn', 'nn_deep'):
+        if self.strategy in ('nn', 'nn_deep', 'nn_ac'):
             if self._nn_override is not None:
                 nn = self._nn_override
             elif self.strategy == 'nn_deep':
                 from nn_player import get_deep_nn_player
                 nn = get_deep_nn_player()
+            elif self.strategy == 'nn_ac':
+                from nn_player import get_ac_player
+                nn = get_ac_player()
             else:
                 from nn_player import get_nn_player
                 nn = get_nn_player()
@@ -129,9 +133,9 @@ class Player:
                 training=self._training_nn,
             )
             if self._training_nn:
-                piece, log_prob = result
+                piece, log_prob, value, entropy = result
                 if log_prob is not None:
-                    self._trajectory.append((log_prob, 0.0))  # step_reward täytetään game.py:ssä
+                    self._trajectory.append((log_prob, 0.0, value, entropy))
                 return piece if piece is not None else random.choice(movable)
             return result if result is not None else random.choice(movable)
 

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Harjoittele Kimble-neuroverkko itsepelillä (REINFORCE-politiikkagradientti)."""
+"""Harjoittele Kimble-neuroverkko (REINFORCE tai Actor-Critic + self-play)."""
 
 import argparse
+import copy
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
 
 import random
 
-from nn_player import KimbleNet, KimbleDeepNet, NNPlayer, MODEL_PATH, DEEP_MODEL_PATH
+from nn_player import KimbleNet, KimbleDeepNet, KimbleActorCritic, NNPlayer, MODEL_PATH, DEEP_MODEL_PATH, AC_MODEL_PATH
 from board import NUM_PLAYERS
 from player import Player, STRATEGY_KEYS
 from game import Game
@@ -16,6 +18,38 @@ from game import Game
 # Strategiat joita käytetään satunnaisina vastustajina koulutuksessa (ei NN-strategioita)
 _NN_STRATEGIES = {'nn', 'nn_deep'}
 _OPPONENT_STRATEGIES = [s for s in STRATEGY_KEYS if s not in _NN_STRATEGIES]
+
+
+def collect_selfplay_episode(
+    nn: NNPlayer,
+    strategy: str,
+    opponent_pool: list,
+    model_class,
+    device: str,
+) -> tuple[list[list], int]:
+    """Self-play: 70% kaikki 4 NN-pelaajaa, 30% pelaaja 0 vs historiallisia malleja poolista."""
+    use_pool = len(opponent_pool) > 0 and random.random() < 0.3
+    players = []
+
+    for i in range(NUM_PLAYERS):
+        p = Player(i, is_human=False, strategy=strategy)
+        if not use_pool or i == 0:
+            p._nn_override = nn
+            p._training_nn = True
+        else:
+            hist_model = model_class()
+            hist_model.load_state_dict(random.choice(opponent_pool))
+            hist_model.to(device)
+            hist_model.eval()
+            p._nn_override = NNPlayer(model=hist_model, device=device)
+            p._training_nn = False
+        players.append(p)
+
+    for p in players:
+        p._all_players = players
+
+    winner = Game(players, verbose=False).run()
+    return [p._trajectory for p in players], winner
 
 
 def collect_episode(nn: NNPlayer, strategy: str = 'nn') -> tuple[list[list], int]:
@@ -44,10 +78,7 @@ def collect_episode(nn: NNPlayer, strategy: str = 'nn') -> tuple[list[list], int
 
 
 def evaluate(model, device: str, strategy: str = 'nn', n: int = 200) -> float:
-    """
-    Pelaa malli 3 longest_eat-vastustajaa vastaan.
-    Palauttaa pelaajan 0 voittoprosenttiluvun.
-    """
+    """Pelaa malli 3 longest_eat-vastustajaa vastaan. Palauttaa voittoprosentin."""
     nn = NNPlayer(model=model, device=device)
     nn.model.eval()
     wins = 0
@@ -63,17 +94,31 @@ def evaluate(model, device: str, strategy: str = 'nn', n: int = 200) -> float:
     return wins / n
 
 
-GAMMA = 0.99  # diskontauskerroin
+GAMMA = 0.99        # diskontauskerroin
+ENTROPY_COEF = 0.01 # entropiabonus (kannustaa tutkimiseen)
+CRITIC_COEF = 0.5   # critic-häviön paino
 
 
-def train(num_episodes: int, batch_size: int, lr: float, device: str, deep: bool = False):
-    net_class = KimbleDeepNet if deep else KimbleNet
-    model_path = DEEP_MODEL_PATH if deep else MODEL_PATH
-    strategy = 'nn_deep' if deep else 'nn'
-    model_label = "syvä (KimbleDeepNet)" if deep else "matala (KimbleNet)"
+def train(num_episodes: int, batch_size: int, lr: float, device: str, deep: bool = False, ac: bool = False):
+    if ac:
+        net_class = KimbleActorCritic
+        model_path = AC_MODEL_PATH
+        strategy = 'nn_ac'
+        model_label = "Actor-Critic (KimbleActorCritic) + self-play"
+    elif deep:
+        net_class = KimbleDeepNet
+        model_path = DEEP_MODEL_PATH
+        strategy = 'nn_deep'
+        model_label = "syvä (KimbleDeepNet)"
+    else:
+        net_class = KimbleNet
+        model_path = MODEL_PATH
+        strategy = 'nn'
+        model_label = "matala (KimbleNet)"
 
     model = net_class().to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    opponent_pool: list = []  # historialliset mallit self-play-diversiteettiin
 
     total_batches = num_episodes // batch_size
     log_every = max(1, 1000 // batch_size)
@@ -81,16 +126,27 @@ def train(num_episodes: int, batch_size: int, lr: float, device: str, deep: bool
 
     print(f"Harjoitellaan {model_label}, {num_episodes} episodia, batch={batch_size}, lr={lr}, laite={device}")
     print(f"  Reward shaping: eteneminen=0.005/yks, syöminen=+0.3, syödyksi=-0.2, maali=+0.5, gamma={GAMMA}")
+    if ac:
+        print(f"  AC-parametrit: critic_coef={CRITIC_COEF}, entropy_coef={ENTROPY_COEF}, opponent_pool=10")
 
     for batch_idx in tqdm(range(total_batches), desc="Harjoitellaan"):
         model.train()
         nn = NNPlayer(model=model, device=device)
 
-        all_log_probs: list["torch.Tensor"] = []
-        all_returns: list[float] = []
+        # Keräysrakenteet
+        actor_log_probs: list["torch.Tensor"] = []
+        actor_advantages: list["torch.Tensor"] = []  # G_t (REINFORCE) tai G_t - V(s) (AC)
+        critic_values: list["torch.Tensor"] = []
+        critic_targets: list["torch.Tensor"] = []
+        entropy_terms: list["torch.Tensor"] = []
 
         for _ in range(batch_size):
-            trajectories, winner = collect_episode(nn, strategy=strategy)
+            if ac:
+                trajectories, winner = collect_selfplay_episode(
+                    nn, strategy, opponent_pool, net_class, device
+                )
+            else:
+                trajectories, winner = collect_episode(nn, strategy=strategy)
 
             for player_id, trajectory in enumerate(trajectories):
                 if not trajectory:
@@ -100,24 +156,51 @@ def train(num_episodes: int, batch_size: int, lr: float, device: str, deep: bool
                 # Laske diskontattut palautukset taaksepäin: G_t = r_t + γ * G_{t+1}
                 G = terminal
                 ep_returns: list[float] = []
-                for lp, sr in reversed(trajectory):
+                for lp, sr, v, ent in reversed(trajectory):
                     G = sr + GAMMA * G
                     ep_returns.append(G)
                 ep_returns.reverse()
 
-                for (lp, _), G in zip(trajectory, ep_returns):
-                    all_log_probs.append(lp)
-                    all_returns.append(G)
+                for (lp, _, v, ent), G_t in zip(trajectory, ep_returns):
+                    G_tensor = torch.tensor(G_t, dtype=torch.float32, device=device)
+                    actor_log_probs.append(lp)
+                    if v is not None:
+                        # Actor-Critic: per-tila advantage
+                        actor_advantages.append(G_tensor - v.detach())
+                        critic_values.append(v)
+                        critic_targets.append(G_tensor)
+                    else:
+                        # REINFORCE: normalisoidaan myöhemmin
+                        actor_advantages.append(G_tensor)
+                    if ent is not None:
+                        entropy_terms.append(ent)
 
         loss_val = 0.0
-        if all_log_probs:
-            returns_t = torch.tensor(all_returns, dtype=torch.float32, device=device)
-            # Normalisoi advantaget (vähentää varianssia)
-            advantages = (returns_t - returns_t.mean()) / (returns_t.std() + 1e-8)
-            batch_losses = [-lp * adv for lp, adv in zip(all_log_probs, advantages)]
+        if actor_log_probs:
+            if ac:
+                # Actor-Critic: per-tila advantage, ei normalisointia
+                adv_stack = torch.stack(actor_advantages)
+            else:
+                # REINFORCE: normalisoi batch-tasolla varianssin pienentämiseksi
+                adv_stack = torch.stack(actor_advantages)
+                adv_stack = (adv_stack - adv_stack.mean()) / (adv_stack.std() + 1e-8)
+
+            actor_loss = torch.stack(
+                [-lp * adv for lp, adv in zip(actor_log_probs, adv_stack)]
+            ).mean()
+            loss = actor_loss
+
+            if critic_values:
+                critic_loss = F.mse_loss(
+                    torch.stack(critic_values),
+                    torch.stack(critic_targets),
+                )
+                loss = loss + CRITIC_COEF * critic_loss
+
+            if entropy_terms:
+                loss = loss - ENTROPY_COEF * torch.stack(entropy_terms).mean()
 
             optimizer.zero_grad()
-            loss = torch.stack(batch_losses).mean()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
@@ -135,6 +218,9 @@ def train(num_episodes: int, batch_size: int, lr: float, device: str, deep: bool
 
         if (batch_idx + 1) % save_every == 0:
             torch.save(model.state_dict(), model_path)
+            if ac:
+                opponent_pool.append(copy.deepcopy(model.state_dict()))
+                opponent_pool = opponent_pool[-10:]  # pidä viimeiset 10
             tqdm.write(f"  Tallennettu: {model_path}")
 
     # Tallenna lopullinen malli
@@ -158,6 +244,8 @@ def main():
                         help="Laite: auto, cpu tai cuda (oletus: auto)")
     parser.add_argument("--deep", action="store_true",
                         help="Harjoittele syvä verkko (KimbleDeepNet) matalan sijaan")
+    parser.add_argument("--ac", action="store_true",
+                        help="Harjoittele Actor-Critic (KimbleActorCritic) + self-play")
     args = parser.parse_args()
 
     if args.device == "auto":
@@ -172,6 +260,7 @@ def main():
         lr=args.lr,
         device=device,
         deep=args.deep,
+        ac=args.ac,
     )
 
 
