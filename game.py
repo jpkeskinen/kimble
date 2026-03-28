@@ -114,8 +114,8 @@ def get_movable_pieces(player: Player, die: int, all_players: list[Player]) -> l
     return movable
 
 
-def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player], verbose: bool = True):
-    """Siirrä nappulaa ja tee tarvittavat toimenpiteet (torkkaaminen)."""
+def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player], verbose: bool = True) -> "Piece | None":
+    """Siirrä nappulaa ja tee tarvittavat toimenpiteet (torkkaaminen). Palauttaa syödyn nappulan tai None."""
     if piece.is_home():
         new_pos = PLAYER_STARTS[player.player_id]
     elif piece.is_in_goal():
@@ -124,17 +124,21 @@ def move_piece(piece: Piece, die: int, player: Player, all_players: list[Player]
         new_pos = _compute_new_pos(piece.pos, die, player.player_id)
 
     if new_pos is None:
-        return  # ei pitäisi tapahtua
+        return None  # ei pitäisi tapahtua
 
     # Torkkaaminen: vastustajan nappula pääradalla palaa kotiin
+    victim = None
     if 0 <= new_pos < TRACK_SIZE:
         victim = get_piece_at(all_players, new_pos)
         if victim is not None and victim.player != player.player_id:
             if verbose:
                 print(f"  Torkku! {PLAYER_COLORS[victim.player]}'n nappula {victim.idx + 1} palaa kotipesään.")
             victim.pos = -1
+        else:
+            victim = None
 
     piece.pos = new_pos
+    return victim
 
 
 class Game:
@@ -181,8 +185,8 @@ class Game:
                     print("  Ei siirrettäviä nappuloita.")
                 break
 
-            needs_eat = player.uses_eating or player.strategy == 'nn'
-            needs_threat = player.uses_defense or player.strategy == 'nn'
+            needs_eat = player.uses_eating or player.strategy in ('nn', 'nn_deep')
+            needs_threat = player.uses_defense or player.strategy in ('nn', 'nn_deep')
             can_eat = get_eating_pieces(player, movable, self.players, die) if needs_eat else set()
             threatened = get_threatened_pieces(player, self.players) if needs_threat else set()
             piece = player.choose_piece(movable, die, can_eat=can_eat, threatened=threatened)
@@ -191,8 +195,28 @@ class Game:
 
             was_home = piece.is_home()
             old_pos = piece.pos
-            move_piece(piece, die, player, self.players, verbose=self.verbose)
+            old_dist = player._piece_distance(piece)
+            victim = move_piece(piece, die, player, self.players, verbose=self.verbose)
+            new_dist = player._piece_distance(piece)
             player.on_piece_moved(piece, was_home)
+
+            # Reward shaping harjoittelua varten
+            if player._training_nn and player._trajectory:
+                step_reward = player._pending_reward
+                player._pending_reward = 0.0
+                step_reward += (new_dist - old_dist) * 0.005  # etenemispalkkio
+                if victim is not None:
+                    step_reward += 0.3  # vastustajan syöminen
+                if piece.is_in_goal() and new_dist == TRACK_SIZE + HOME_SIZE:
+                    step_reward += 0.5  # nappula viimeiseen maalislottiin
+                lp, _ = player._trajectory[-1]
+                player._trajectory[-1] = (lp, step_reward)
+
+            # Syödyksi tulemisen rangaistus syödyn nappulan omistajalle
+            if victim is not None:
+                victim_player = self.players[victim.player]
+                if victim_player._training_nn:
+                    victim_player._pending_reward -= 0.2
             if self.verbose:
                 _print_move(player, piece, old_pos, die)
                 print_board(self.players)

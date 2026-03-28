@@ -9,7 +9,8 @@ STRATEGY_NAMES = {
     'longest_eat_dodge': 'Pisin ensin + syö + väistä',
     'shortest':          'Lyhin ensin',
     'shortest_eat':      'Lyhin ensin + syö',
-    'nn':                'Neuroverkko',
+    'nn':                'Neuroverkko (matala)',
+    'nn_deep':           'Neuroverkko (syvä)',
 }
 STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 
@@ -32,7 +33,8 @@ class Player:
         self._all_players: list | None = None    # asetetaan Game.__init__:ssa
         self._nn_override: object | None = None  # NNPlayer-instanssi harjoittelua varten
         self._training_nn: bool = False          # True → tallenna log_probit
-        self._trajectory: list = []              # log_prob-lista episodille
+        self._trajectory: list = []              # (log_prob, step_reward) -pareja episodille
+        self._pending_reward: float = 0.0        # kertynyt palkkio ennen seuraavaa siirtoa
 
     @property
     def type_label(self) -> str:
@@ -111,10 +113,16 @@ class Player:
             print("  Virheellinen valinta, yritä uudelleen.")
 
     def _ai_choose(self, movable: list[Piece], die: int, can_eat: set, threatened: set) -> Piece:
-        # Neuroverkkostrategia
-        if self.strategy == 'nn':
-            from nn_player import get_nn_player
-            nn = self._nn_override if self._nn_override is not None else get_nn_player()
+        # Neuroverkkostrategiat
+        if self.strategy in ('nn', 'nn_deep'):
+            if self._nn_override is not None:
+                nn = self._nn_override
+            elif self.strategy == 'nn_deep':
+                from nn_player import get_deep_nn_player
+                nn = get_deep_nn_player()
+            else:
+                from nn_player import get_nn_player
+                nn = get_nn_player()
             all_players = self._all_players or []
             result = nn.choose_piece(
                 self, movable, die, all_players, can_eat, threatened,
@@ -123,7 +131,7 @@ class Player:
             if self._training_nn:
                 piece, log_prob = result
                 if log_prob is not None:
-                    self._trajectory.append(log_prob)
+                    self._trajectory.append((log_prob, 0.0))  # step_reward täytetään game.py:ssä
                 return piece if piece is not None else random.choice(movable)
             return result if result is not None else random.choice(movable)
 
