@@ -9,12 +9,16 @@ STRATEGY_NAMES = {
     'longest_eat_dodge': 'Pisin ensin + syö + väistä',
     'shortest':          'Lyhin ensin',
     'shortest_eat':      'Lyhin ensin + syö',
+    'nn':                'Neuroverkko (matala)',
+    'nn_deep':           'Neuroverkko (syvä)',
+    'nn_ac':             'Neuroverkko (Actor-Critic)',
 }
 STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 
 _EAT_STRATEGIES = {'longest_eat', 'longest_eat_dodge', 'shortest_eat'}
 _LONGEST_STRATEGIES = {'longest', 'longest_eat', 'longest_eat_dodge'}
 _DEFENSE_STRATEGIES = {'longest_eat_dodge'}
+_NN_STRATEGIES = {'nn', 'nn_deep', 'nn_ac'}
 
 
 class Player:
@@ -27,6 +31,12 @@ class Player:
         self.start = PLAYER_STARTS[player_id]
         self.pieces = [Piece(player_id, i) for i in range(4)]
         self._just_launched: Piece | None = None
+        # Neuroverkkostrategiaa varten
+        self._all_players: list | None = None    # asetetaan Game.__init__:ssa
+        self._nn_override: object | None = None  # NNPlayer-instanssi harjoittelua varten
+        self._training_nn: bool = False          # True → tallenna log_probit
+        self._trajectory: list = []              # (log_prob, step_reward, value, entropy) -nelikkoja
+        self._pending_reward: float = 0.0        # kertynyt palkkio ennen seuraavaa siirtoa
 
     @property
     def type_label(self) -> str:
@@ -36,11 +46,11 @@ class Player:
 
     @property
     def uses_eating(self) -> bool:
-        return self.strategy in _EAT_STRATEGIES
+        return self.strategy in _EAT_STRATEGIES or self.strategy in _NN_STRATEGIES
 
     @property
     def uses_defense(self) -> bool:
-        return self.strategy in _DEFENSE_STRATEGIES
+        return self.strategy in _DEFENSE_STRATEGIES or self.strategy in _NN_STRATEGIES
 
     def pieces_at_home(self):
         return [p for p in self.pieces if p.is_home()]
@@ -105,6 +115,31 @@ class Player:
             print("  Virheellinen valinta, yritä uudelleen.")
 
     def _ai_choose(self, movable: list[Piece], die: int, can_eat: set, threatened: set) -> Piece:
+        # Neuroverkkostrategiat
+        if self.strategy in ('nn', 'nn_deep', 'nn_ac'):
+            if self._nn_override is not None:
+                nn = self._nn_override
+            elif self.strategy == 'nn_deep':
+                from nn_player import get_deep_nn_player
+                nn = get_deep_nn_player()
+            elif self.strategy == 'nn_ac':
+                from nn_player import get_ac_player
+                nn = get_ac_player()
+            else:
+                from nn_player import get_nn_player
+                nn = get_nn_player()
+            all_players = self._all_players or []
+            result = nn.choose_piece(
+                self, movable, die, all_players, can_eat, threatened,
+                training=self._training_nn,
+            )
+            if self._training_nn:
+                piece, log_prob, value, entropy = result
+                if log_prob is not None:
+                    self._trajectory.append((log_prob, 0.0, value, entropy))
+                return piece if piece is not None else random.choice(movable)
+            return result if result is not None else random.choice(movable)
+
         # Syöminen on ylin prioriteetti strategioille longest_eat ja shortest_eat
         if self.strategy in _EAT_STRATEGIES and can_eat:
             best = (max if self.strategy == 'longest_eat' else min)(
