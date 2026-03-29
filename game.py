@@ -185,8 +185,8 @@ class Game:
                     print("  Ei siirrettäviä nappuloita.")
                 break
 
-            needs_eat = player.uses_eating or player.strategy in ('nn', 'nn_deep')
-            needs_threat = player.uses_defense or player.strategy in ('nn', 'nn_deep')
+            needs_eat = player.uses_eating
+            needs_threat = player.uses_defense
             can_eat = get_eating_pieces(player, movable, self.players, die) if needs_eat else set()
             threatened = get_threatened_pieces(player, self.players) if needs_threat else set()
             piece = player.choose_piece(movable, die, can_eat=can_eat, threatened=threatened)

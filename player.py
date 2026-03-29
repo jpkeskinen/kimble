@@ -18,6 +18,7 @@ STRATEGY_KEYS = list(STRATEGY_NAMES.keys())
 _EAT_STRATEGIES = {'longest_eat', 'longest_eat_dodge', 'shortest_eat'}
 _LONGEST_STRATEGIES = {'longest', 'longest_eat', 'longest_eat_dodge'}
 _DEFENSE_STRATEGIES = {'longest_eat_dodge'}
+_NN_STRATEGIES = {'nn', 'nn_deep', 'nn_ac'}
 
 
 class Player:
@@ -45,11 +46,11 @@ class Player:
 
     @property
     def uses_eating(self) -> bool:
-        return self.strategy in _EAT_STRATEGIES
+        return self.strategy in _EAT_STRATEGIES or self.strategy in _NN_STRATEGIES
 
     @property
     def uses_defense(self) -> bool:
-        return self.strategy in _DEFENSE_STRATEGIES
+        return self.strategy in _DEFENSE_STRATEGIES or self.strategy in _NN_STRATEGIES
 
     def pieces_at_home(self):
         return [p for p in self.pieces if p.is_home()]

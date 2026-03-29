@@ -16,7 +16,7 @@ from player import Player, STRATEGY_KEYS
 from game import Game
 
 # Strategiat joita käytetään satunnaisina vastustajina koulutuksessa (ei NN-strategioita)
-_NN_STRATEGIES = {'nn', 'nn_deep'}
+_NN_STRATEGIES = {'nn', 'nn_deep', 'nn_ac'}
 _OPPONENT_STRATEGIES = [s for s in STRATEGY_KEYS if s not in _NN_STRATEGIES]
 
 
@@ -45,18 +45,15 @@ def collect_selfplay_episode(
             p._training_nn = False
         players.append(p)
 
-    for p in players:
-        p._all_players = players
-
     winner = Game(players, verbose=False).run()
     return [p._trajectory for p in players], winner
 
 
 def collect_episode(nn: NNPlayer, strategy: str = 'nn') -> tuple[list[list], int]:
-    """
-    Pelaa yksi peli: pelaaja 0 on NN (strategy='nn' tai 'nn_deep'), muut saavat satunnaisen strategian.
-    Palauttaa (trajectories, winner_id).
-    trajectories[0] on lista log_prob-tensoreista NN-pelaajalle (muut ovat tyhjiä).
+    """Pelaa yksi peli REINFORCE-harjoittelua varten.
+
+    Pelaaja 0 on NN, muut saavat satunnaisen sääntöpohjaisen strategian.
+    Palauttaa (trajectories, winner_id); vain trajectories[0] on epätyhjä.
     """
     players = []
     for i in range(NUM_PLAYERS):
@@ -66,9 +63,6 @@ def collect_episode(nn: NNPlayer, strategy: str = 'nn') -> tuple[list[list], int
             s = random.choice(_OPPONENT_STRATEGIES)
             p = Player(i, is_human=False, strategy=s)
         players.append(p)
-
-    for p in players:
-        p._all_players = players
 
     players[0]._nn_override = nn
     players[0]._training_nn = True
