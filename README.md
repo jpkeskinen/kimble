@@ -1,17 +1,6 @@
-# Kimble – Python-toteutus
+# Kimble-simulaattori
 
-Python-toteutus suomalaisesta **Kimble**-lautapelistä (tunnetaan myös nimellä Trouble). Tukee ihmis- ja tietokonepelaajia, massasimulaatiota sekä neuroverkkoihin perustuvaa tekoälyä.
-
----
-
-## Pelin säännöt lyhyesti
-
-- 4 pelaajaa, jokaisella 4 nappulaa kotipesässä
-- 28 ruutua pääradalla, 4 ruutua maalialueella
-- **Kuutosella** pääsee kotipesästä radalle; kuutonen antaa myös lisäheiton
-- Laskeutuminen vastustajan nappulan päälle lähettää sen takaisin kotipesään (*torkku*)
-- Kolme kuutosta peräkkäin katkaisee vuoron
-- Voittaja: ensimmäinen joka saa kaikki 4 nappulaa maaliin
+Kaikille tuttua Kimble-pelia simuloiva koodi. Halusin selvittää ja kokeilla miten erilaiset pelitaktiikat toimivat ja onko jokin niistä parempi kuin toinen. Eli koodin suurin ilo ja hyöty on siinä, että tietokonepelaajat voivat pelata toisaan vastaan siinä. Jos haluat pelata Kimbleä omaksi ja muiden iloksi, kannattaa käydä hakemassa kaupasta fyysinen versio.
 
 ---
 
