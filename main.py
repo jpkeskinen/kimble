@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+#    Kimble-simulaattori jonka avulla voi simuloida Kimbleä.
+#    Copyright (C) 2026  Jukka-Pekka Keskinen
+#    This program is free software: you can redistribute it and/or modify
+
+
 """Kimble-pelin käynnistys."""
 from tqdm import tqdm
 from board import NUM_PLAYERS, PLAYER_COLORS
