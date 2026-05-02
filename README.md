@@ -1,6 +1,6 @@
 # Kimble-simulaattori
 
-Kaikille tuttua Kimble-pelia simuloiva koodi. Halusin selvittää ja kokeilla miten erilaiset pelitaktiikat toimivat ja onko jokin niistä parempi kuin toinen. Eli koodin suurin ilo ja hyöty on siinä, että tietokonepelaajat voivat pelata toisaan vastaan siinä. Jos haluat pelata Kimbleä omaksi ja muiden iloksi, kannattaa käydä hakemassa kaupasta fyysinen versio.
+Kaikille tuttua Kimble-peliä simuloiva koodi. Halusin selvittää ja kokeilla miten erilaiset pelitaktiikat toimivat ja onko jokin niistä parempi kuin toinen. Eli koodin suurin ilo ja hyöty on siinä, että tietokonepelaajat voivat pelata toisaan vastaan siinä. Jos haluat pelata Kimbleä omaksi ja muiden iloksi, kannattaa käydä hakemassa kaupasta fyysinen versio.
 
 ---
 
@@ -125,7 +125,7 @@ Lyhyt vastaus: **paras sääntöpohjainen strategia on jo lähellä optimaalista
 
 Pidempi selitys:
 
-1. **Noppa dominoi.** Joka vuorolla heitetään noppaa — iso osa pelin lopputuloksesta on sattumaa. Gradient-signaali hukkuu kohinaan, kun yksittäisen siirron vaikutus voittoon näkyy vasta satoja siirtoja myöhemmin.
+1. **Noppa dominoi.** Joka vuorolla heitetään noppaa — iso osa pelin lopputuloksesta on sattumaa. Signaali hukkuu kohinaan, kun yksittäisen siirron vaikutus voittoon näkyy vasta satoja siirtoja myöhemmin.
 
 2. **Päätöksenteko on yksinkertaista.** Tyypillisesti liikutettavia nappuloita on 1–3. Pelissä ei ole monimutkaisia kombinatorisia valintoja joita neuroverkon täytyisi oppia.
 
